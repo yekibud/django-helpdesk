@@ -35,6 +35,9 @@ from helpdesk import settings as helpdesk_settings
 if HAS_TAGGING_SUPPORT:
     from tagging.models import Tag, TaggedItem
 
+if HAS_TAGGIT_SUPPORT:
+    from taggit.models import Tag
+
 if helpdesk_settings.HELPDESK_ALLOW_NON_STAFF_TICKET_UPDATE:
     # treat 'normal' users like 'staff'
     staff_member_required = user_passes_test(lambda u: u.is_authenticated() and u.is_active)
@@ -724,6 +727,12 @@ def ticket_list(request):
             ticket_qs = TaggedItem.objects.get_by_model(ticket_qs, tags)
             query_params['tags'] = tags
 
+    if HAS_TAGGIT_SUPPORT:
+        tags = request.GET.getlist('tags')
+        if tags:
+            ticket_qs = Ticket.objects.filter(tags__name__in=tags)
+            query_params['tags'] = tags
+
     ticket_paginator = paginator.Paginator(ticket_qs, request.user.usersettings.settings.get('tickets_per_page') or 20)
     try:
         page = int(request.GET.get('page', '1'))
@@ -752,7 +761,7 @@ def ticket_list(request):
             query_string.append("%s=%s" % (get_key, get_value))
 
     tag_choices = [] 
-    if HAS_TAGGING_SUPPORT:
+    if HAS_TAGGING_SUPPORT or HAS_TAGGIT_SUPPORT:
         # FIXME: restrict this to tags that are actually in use
         tag_choices = Tag.objects.all()
 
