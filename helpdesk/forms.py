@@ -285,7 +285,6 @@ class TicketForm(forms.ModelForm):
                         title = _('Ticket Opened'),
                         date = datetime.now(),
                         public = True,
-                        comment = self.cleaned_data['description'],
                         user = user,
                      )
         if self.cleaned_data['assigned_to']:
