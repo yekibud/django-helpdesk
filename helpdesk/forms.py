@@ -285,6 +285,7 @@ class TicketForm(forms.ModelForm):
                         title = _('Ticket Opened'),
                         date = datetime.now(),
                         public = True,
+			comment = self.cleaned_data['description'] if helpdesk_settings.HELPDESK_INCLUDE_DESCRIPTION_IN_FOLLOWUP else None,
                         user = user,
                      )
         if self.cleaned_data['assigned_to']:
