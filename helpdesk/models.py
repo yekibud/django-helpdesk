@@ -438,7 +438,7 @@ class Ticket(models.Model):
     if HAS_TAGGING_SUPPORT:
         tags = TagField(blank=True)
     elif HAS_TAGGIT_SUPPORT:
-        tags = TaggableManager()
+        tags = TaggableManager(blank=True)
 
     class Meta:
         get_latest_by = "created"
