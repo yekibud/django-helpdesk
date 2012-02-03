@@ -234,6 +234,7 @@ def view_ticket(request, ticket_id):
         RequestContext(request, {
             'ticket': ticket,
             'form': form,
+            'request': request,
             'active_users': users,
             'priorities': Ticket.PRIORITY_CHOICES,
             'preset_replies': PreSetReply.objects.filter(Q(queues=ticket.queue) | Q(queues__isnull=True)),
