@@ -117,9 +117,11 @@ class TicketForm(forms.ModelForm):
 
     def clean_assigned_to(self):
         data = self.cleaned_data['assigned_to']
-        data = User.objects.get(pk=data)
-        return data
-
+        if data:
+	    data = User.objects.get(pk=data)
+	    return data
+	else:
+	    return None
 
     class Meta:
         model = Ticket 
