@@ -141,7 +141,7 @@ class TicketForm(forms.ModelForm):
         )
 
     submitter_email = forms.EmailField(
-        required=False,
+        required=True,
         label=_('Submitter E-Mail Address'),
         widget=forms.TextInput(attrs={'size':'60'}),
         help_text=_('This e-mail address will receive copies of all public '
