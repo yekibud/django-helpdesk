@@ -13,7 +13,7 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.conf import settings
 from django.utils.translation import ugettext_lazy as _, ugettext
-from helpdesk.settings import HAS_TAGGING_SUPPORT, HAS_TAGGIT_SUPPORT
+from helpdesk.settings import HAS_TAGGING_SUPPORT, HAS_TAGGIT_SUPPORT, HELPDESK_STAFF_ONLY_TICKET_OWNERS
 
 
 if HAS_TAGGING_SUPPORT:
@@ -294,6 +294,7 @@ class Ticket(models.Model):
         blank=True,
         null=True,
         verbose_name=_('Assigned to'),
+        limit_choices_to={'is_staff': True} if HELPDESK_STAFF_ONLY_TICKET_OWNERS else None,
         )
 
     status = models.IntegerField(
