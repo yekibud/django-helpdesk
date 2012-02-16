@@ -663,7 +663,7 @@ def ticket_list(request):
              try:
                 queues = [int(q) for q in queues]
                 query_params['filtering']['queue__id__in'] = queues
-            except ValueError:
+             except ValueError:
                 pass
 
         owners = request.GET.getlist('assigned_to')
@@ -671,7 +671,7 @@ def ticket_list(request):
              try:
                 owners = [int(u) for u in owners]
                 query_params['filtering']['assigned_to__id__in'] = owners
-            except ValueError:
+             except ValueError:
                 pass
 
         statuses = request.GET.getlist('status')
