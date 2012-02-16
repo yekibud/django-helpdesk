@@ -15,7 +15,6 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.files.base import ContentFile
 from django.core.urlresolvers import reverse
-from django.core.exceptions import ValidationError
 from django.core import paginator
 from django.db import connection
 from django.db.models import Q
@@ -250,10 +249,10 @@ def update_ticket(request, ticket_id, public=False):
     public = request.POST.get('public', False)
     owner = int(request.POST.get('owner', None))
     priority = int(request.POST.get('priority', ticket.priority))
-    due_year = int(request.POST.get('due_date_year'))
-    due_month = int(request.POST.get('due_date_month'))
-    due_day = int(request.POST.get('due_date_day'))
-    due_date = datetime(due_year, due_month, due_day) if due_year and due_month and due_day else ticket.due_date
+    due_date = datetime(
+            int(request.POST.get('due_date_year')),
+            int(request.POST.get('due_date_month')),
+            int(request.POST.get('due_date_day')))
     tags = request.POST.get('tags', '')
 
     # We need to allow the 'ticket' and 'queue' contexts to be applied to the
@@ -355,6 +354,9 @@ def update_ticket(request, ticket_id, public=False):
             old_value=ticket.due_date,
             new_value=due_date,
             )
+        if helpdesk_settings.HELPDESK_UPDATE_CALENDAR:
+            from helpdesk import calendars
+            calendars.update_calendar(request, search_date=ticket.due_date)
         c.save()
         ticket.due_date = due_date
 
@@ -369,7 +371,7 @@ def update_ticket(request, ticket_id, public=False):
             c.save()
             ticket.tags = tags
 
-    if new_status in [ Ticket.RESOLVED_STATUS, Ticket.CLOSED_STATUS ]:
+    if new_status == Ticket.RESOLVED_STATUS:
         ticket.resolution = comment
 
     messages_sent_to = []
@@ -634,27 +636,18 @@ def ticket_list(request):
     else:
         queues = request.GET.getlist('queue')
         if queues:
-            try:
-                queues = [int(q) for q in queues]
-                query_params['filtering']['queue__id__in'] = queues
-            except ValueError:
-                pass
+            queues = [int(q) for q in queues]
+            query_params['filtering']['queue__id__in'] = queues
 
         owners = request.GET.getlist('assigned_to')
         if owners:
-            try:
-                owners = [int(u) for u in owners]
-                query_params['filtering']['assigned_to__id__in'] = owners
-            except ValueError:
-                pass
+            owners = [int(u) for u in owners]
+            query_params['filtering']['assigned_to__id__in'] = owners
 
         statuses = request.GET.getlist('status')
         if statuses:
-            try:
-                statuses = [int(s) for s in statuses]
-                query_params['filtering']['status__in'] = statuses
-            except ValueError:
-                pass
+            statuses = [int(s) for s in statuses]
+            query_params['filtering']['status__in'] = statuses
 
         date_from = request.GET.get('date_from')
         if date_from:
@@ -687,15 +680,8 @@ def ticket_list(request):
         sortreverse = request.GET.get('sortreverse', None)
         query_params['sortreverse'] = sortreverse
 
-    try:
-        ticket_qs = apply_query(Ticket.objects.select_related(), query_params)
-    except ValidationError:
-        # invalid parameters in query, return default query
-        query_params = {
-            'filtering': {'status__in': [1, 2, 3]},
-            'sorting': 'created',
-        }
-        ticket_qs = apply_query(Ticket.objects.select_related(), query_params)
+    ticket_qs = apply_query(Ticket.objects.select_related(), query_params)
+    print >> sys.stderr,  str(ticket_qs.query)
 
     ## TAG MATCHING
     if HAS_TAG_SUPPORT:
@@ -775,7 +761,8 @@ edit_ticket = staff_member_required(edit_ticket)
 
 def create_ticket(request):
     if request.method == 'POST':
-        form = TicketForm(request.POST, request.FILES)
+        # add request to process user related events
+        form = TicketForm(request.POST, request.FILES, request=request)
         form.fields['queue'].choices = [('', '--------')] + [[q.id, q.title] for q in Queue.objects.all()]
         form.fields['assigned_to'].choices = [('', '--------')] + [[u.id, u.username] for u in User.objects.filter(is_active=True).order_by('username')]
         if form.is_valid():

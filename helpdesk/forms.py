@@ -109,6 +109,7 @@ class EditFollowUpForm(forms.ModelForm):
         exclude = ('date', 'user',)
 
 class TicketForm(forms.Form):
+
     queue = forms.ChoiceField(
         label=_('Queue'),
         required=True,
@@ -159,6 +160,14 @@ class TicketForm(forms.Form):
         label=_('Due on'),
         )
 
+    def clean_due_date(self):
+        data = self.cleaned_data['due_date']
+        #TODO: add Google calendar update hook, store event id with ticket
+        if data and helpdesk_settings.HELPDESK_UPDATE_CALENDAR:
+            from helpdesk import calendars
+            calendars.update_calendar(self.request)
+        return data
+
     attachment = forms.FileField(
         required=False,
         label=_('Attach File'),
@@ -176,10 +185,14 @@ class TicketForm(forms.Form):
                     'ticket'),
             )
 
+
+
     def __init__(self, *args, **kwargs):
         """
         Add any custom fields that are defined to the form
         """
+        # need request for due date update calendar trigger
+        self.request = kwargs.pop('request', None)
         super(TicketForm, self).__init__(*args, **kwargs)
         for field in CustomField.objects.all():
             instanceargs = {
