@@ -57,7 +57,7 @@ $(document).ready(function() {
         <option value='Status'>{% trans "Status" %}</option>
         <option value='Keywords'>{% trans "Keywords" %}</option>
         <option value='Dates'>{% trans "Date Range" %}</option>
-        {% if tags_enabled %}
+        {% if tagging_enabled or taggit_enabled %}
         <option value='Tags'>{% trans "Tags" %}</option>
         {% endif %}
         </select>
@@ -125,7 +125,7 @@ $(document).ready(function() {
     <input type='button' class='filterBuilderRemove' value='-' />
     </div>
 
-{% if tags_enabled %}
+{% if tagging_enabled or taggit_enabled %}
 <div class='filterBox{% if query_params.tags %} filterBoxShow{% endif %}' id='filterBoxTags'>
   <label for='id_tags'>{% trans "Tag(s)" %}</label><select id='id_tags' name='tags' multiple='selected' size='5'>{% for t in tag_choices %}<option value='{{t.name}}'{% if t.name|in_list:query_params.tags %} selected='selected'{% endif %}>{{ t.name }}</option>{% endfor %}</select>
 <p class='filterHelp'>{% trans "Ctrl-click to select multiple options" %}</p>

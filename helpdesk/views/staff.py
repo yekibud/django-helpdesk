@@ -15,6 +15,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.files.base import ContentFile
 from django.core.urlresolvers import reverse
+from django.core.exceptions import ValidationError
 from django.core import paginator
 from django.db import connection
 from django.db.models import Q
@@ -28,11 +29,15 @@ from django import forms
 from helpdesk.forms import TicketForm, UserSettingsForm, EmailIgnoreForm, EditTicketForm, TicketCCForm, EditFollowUpForm, TicketDependencyForm
 from helpdesk.lib import send_templated_mail, query_to_dict, apply_query, safe_template_context
 from helpdesk.models import Ticket, Queue, FollowUp, TicketChange, PreSetReply, Attachment, SavedSearch, IgnoreEmail, TicketCC, TicketDependency
-from helpdesk.settings import HAS_TAG_SUPPORT
+from helpdesk.settings import HAS_TAGGING_SUPPORT, HAS_TAGGIT_SUPPORT
 from helpdesk import settings as helpdesk_settings
   
-if HAS_TAG_SUPPORT:
+if HAS_TAGGING_SUPPORT:
     from tagging.models import Tag, TaggedItem
+
+if HAS_TAGGIT_SUPPORT:
+    from taggit.models import Tag
+
 
 if helpdesk_settings.HELPDESK_ALLOW_NON_STAFF_TICKET_UPDATE:
     # treat 'normal' users like 'staff'
@@ -223,16 +228,19 @@ def view_ticket(request, ticket_id):
 
 
     # TODO: shouldn't this template get a form to begin with?
-    form = TicketForm(initial={'due_date':ticket.due_date})
+    form = TicketForm(instance=ticket)
+
 
     return render_to_response('helpdesk/ticket.html',
         RequestContext(request, {
             'ticket': ticket,
             'form': form,
+            'request': request,
             'active_users': users,
             'priorities': Ticket.PRIORITY_CHOICES,
             'preset_replies': PreSetReply.objects.filter(Q(queues=ticket.queue) | Q(queues__isnull=True)),
-            'tags_enabled': HAS_TAG_SUPPORT,
+            'tagging_enabled': HAS_TAGGING_SUPPORT,
+            'taggit_enabled': HAS_TAGGIT_SUPPORT,
         }))
 view_ticket = staff_member_required(view_ticket)
 
@@ -249,10 +257,10 @@ def update_ticket(request, ticket_id, public=False):
     public = request.POST.get('public', False)
     owner = int(request.POST.get('owner', None))
     priority = int(request.POST.get('priority', ticket.priority))
-    due_date = datetime(
-            int(request.POST.get('due_date_year')),
-            int(request.POST.get('due_date_month')),
-            int(request.POST.get('due_date_day')))
+    due_year = int(request.POST.get('due_date_year'))
+    due_month = int(request.POST.get('due_date_month'))
+    due_day = int(request.POST.get('due_date_day'))
+    due_date = datetime(due_year, due_month, due_day) if due_year and due_month and due_day else ticket.due_date
     tags = request.POST.get('tags', '')
 
     # We need to allow the 'ticket' and 'queue' contexts to be applied to the
@@ -360,7 +368,7 @@ def update_ticket(request, ticket_id, public=False):
         c.save()
         ticket.due_date = due_date
 
-    if HAS_TAG_SUPPORT:
+    if HAS_TAGGING_SUPPORT:
         if tags != ticket.tags:
             c = TicketChange(
                 followup=f,
@@ -371,7 +379,23 @@ def update_ticket(request, ticket_id, public=False):
             c.save()
             ticket.tags = tags
 
-    if new_status == Ticket.RESOLVED_STATUS:
+    if HAS_TAGGIT_SUPPORT:
+        old_tags = [tag.name for tag in ticket.tags.all()]
+        old_tags.sort()
+        new_tags = tags.replace(' ','').strip(',').split(',')
+        new_tags.sort()
+        if new_tags != old_tags:
+            c = TicketChange(
+                followup=f,
+                field=_('Tags'),
+                old_value=', '.join(old_tags),
+                new_value=', '.join(new_tags),
+                )
+            c.save()
+            ticket.tags.set(*new_tags)
+
+
+    if new_status in [ Ticket.RESOLVED_STATUS, Ticket.CLOSED_STATUS ]:
         ticket.resolution = comment
 
     messages_sent_to = []
@@ -636,18 +660,28 @@ def ticket_list(request):
     else:
         queues = request.GET.getlist('queue')
         if queues:
-            queues = [int(q) for q in queues]
-            query_params['filtering']['queue__id__in'] = queues
+             try:
+                queues = [int(q) for q in queues]
+                query_params['filtering']['queue__id__in'] = queues
+            except ValueError:
+                pass
 
         owners = request.GET.getlist('assigned_to')
         if owners:
-            owners = [int(u) for u in owners]
-            query_params['filtering']['assigned_to__id__in'] = owners
+             try:
+                owners = [int(u) for u in owners]
+                query_params['filtering']['assigned_to__id__in'] = owners
+            except ValueError:
+                pass
 
         statuses = request.GET.getlist('status')
         if statuses:
-            statuses = [int(s) for s in statuses]
-            query_params['filtering']['status__in'] = statuses
+            try:
+                statuses = [int(s) for s in statuses]
+                query_params['filtering']['status__in'] = statuses
+            except ValueError:
+                pass
+
 
         date_from = request.GET.get('date_from')
         if date_from:
@@ -680,15 +714,29 @@ def ticket_list(request):
         sortreverse = request.GET.get('sortreverse', None)
         query_params['sortreverse'] = sortreverse
 
-    ticket_qs = apply_query(Ticket.objects.select_related(), query_params)
-    print >> sys.stderr,  str(ticket_qs.query)
+    try:
+        ticket_qs = apply_query(Ticket.objects.select_related(), query_params)
+    except ValidationError:
+        # invalid parameters in query, return default query
+        query_params = {
+            'filtering': {'status__in': [1, 2, 3]},
+            'sorting': 'created',
+        }
+        ticket_qs = apply_query(Ticket.objects.select_related(), query_params)
 
     ## TAG MATCHING
-    if HAS_TAG_SUPPORT:
+    if HAS_TAGGING_SUPPORT:
         tags = request.GET.getlist('tags')
         if tags:
             ticket_qs = TaggedItem.objects.get_by_model(ticket_qs, tags)
             query_params['tags'] = tags
+
+    if HAS_TAGGIT_SUPPORT:
+        tags = request.GET.getlist('tags')
+        if tags:
+            ticket_qs = Ticket.objects.filter(tags__name__in=tags)
+            query_params['tags'] = tags
+
 
     ticket_paginator = paginator.Paginator(ticket_qs, request.user.usersettings.settings.get('tickets_per_page') or 20)
     try:
@@ -718,7 +766,7 @@ def ticket_list(request):
             query_string.append("%s=%s" % (get_key, get_value))
 
     tag_choices = [] 
-    if HAS_TAG_SUPPORT:
+    if HAS_TAGGING_SUPPORT or HAS_TAGGIT_SUPPORT:
         # FIXME: restrict this to tags that are actually in use
         tag_choices = Tag.objects.all()
 
@@ -737,7 +785,8 @@ def ticket_list(request):
             from_saved_query=from_saved_query,
             saved_query=saved_query,
             search_message=search_message,
-            tags_enabled=HAS_TAG_SUPPORT
+            tagging_enabled=HAS_TAGGING_SUPPORT,
+            taggit_enabled=HAS_TAGGIT_SUPPORT,
         )))
 ticket_list = staff_member_required(ticket_list)
 
@@ -751,11 +800,13 @@ def edit_ticket(request, ticket_id):
             return HttpResponseRedirect(ticket.get_absolute_url())
     else:
         form = EditTicketForm(instance=ticket)
+
     
     return render_to_response('helpdesk/edit_ticket.html',
         RequestContext(request, {
             'form': form,
-            'tags_enabled': HAS_TAG_SUPPORT,
+            'tagging_enabled': HAS_TAGGING_SUPPORT,
+            'taggit_enabled': HAS_TAGGIT_SUPPORT,
         }))
 edit_ticket = staff_member_required(edit_ticket)
 
@@ -788,7 +839,8 @@ def create_ticket(request):
     return render_to_response('helpdesk/create_ticket.html',
         RequestContext(request, {
             'form': form,
-            'tags_enabled': HAS_TAG_SUPPORT,
+            'tagging_enabled': HAS_TAGGING_SUPPORT,
+            'taggit_enabled': HAS_TAGGIT_SUPPORT,
         }))
 create_ticket = staff_member_required(create_ticket)
 

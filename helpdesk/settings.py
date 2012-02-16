@@ -66,6 +66,9 @@ HELPDESK_SHOW_CHANGE_PASSWORD = getattr(settings, 'HELPDESK_SHOW_CHANGE_PASSWORD
 # allow user to override default layout for 'followups' - work in progress.
 HELPDESK_FOLLOWUP_MOD = getattr(settings, 'HELPDESK_FOLLOWUP_MOD', False)
 
+# include or exclude the ticket description from it's initial follow-up on creation
+HELPDESK_INCLUDE_DESCRIPTION_IN_FOLLOWUP = getattr(settings, 'HELPDESK_INCLUDE_DESCRIPTION_IN_FOLLOWUP', True)
+
 # show custom welcome message in dashboard?
 HELPDESK_CUSTOM_WELCOME = getattr(settings, 'HELPDESK_CUSTOM_WELCOME', False)
 
@@ -86,7 +89,7 @@ HELPDESK_SUBMIT_A_TICKET_PUBLIC = getattr(settings, 'HELPDESK_SUBMIT_A_TICKET_PU
 HELPDESK_ALLOW_NON_STAFF_TICKET_UPDATE = getattr(settings, 'HELPDESK_ALLOW_NON_STAFF_TICKET_UPDATE', False)
 
 # show edit buttons in ticket follow ups.
-HELPDESK_SHOW_EDIT_BUTTON_FOLLOW_UP = getattr(settings, 'HELPDESK_HIDE_EDIT_BUTTON_FOLLOW_UP', True)
+HELPDESK_SHOW_EDIT_BUTTON_FOLLOW_UP = getattr(settings, 'HELPDESK_SHOW_EDIT_BUTTON_FOLLOW_UP', True)
 
 # show ticket edit button on top of ticket description.
 HELPDESK_SHOW_EDIT_BUTTON_TICKET_TOP = getattr(settings, 'HELPDESK_SHOW_EDIT_BUTTON_TICKET_TOP', True)
